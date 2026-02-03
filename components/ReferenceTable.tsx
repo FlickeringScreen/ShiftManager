@@ -125,7 +125,7 @@ export const ReferenceTable: React.FC<ReferenceTableProps> = ({ financialData })
         'Notturni': ['LNH5', 'TN30', 'TN35', 'RMTR'],
         'Straordinari': ['STSE'], // Manual rows will be handled separately
         'Festività e Domenicali': Object.keys(ALLOWANCE_RULES).filter(k => k.startsWith('DH') || k.startsWith('LFH') || k.startsWith('LPH')),
-        'Altro': ['ITV7', 'IVTT', 'IVTO', 'MNL'],
+        'Altro': ['ITV7', 'IVTT', 'IVTO', 'MNL', 'MNW'],
     };
 
     return (

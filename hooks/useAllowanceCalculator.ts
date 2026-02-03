@@ -2,20 +2,19 @@
 import { useCallback } from 'react';
 import type { CalculatedShift, FinancialData, Allowance } from '../types';
 import { ALLOWANCE_RULES } from '../constants';
+import type { HolidayOverrides } from '../App';
 
-const isHoliday = (date: Date): boolean => {
+const getHolidayType = (date: Date): 'none' | 'holiday' | 'principal_holiday' => {
     // This is a simplified holiday check. For production, a more robust library might be needed.
     const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
     const day = utcDate.getUTCDate();
     const month = utcDate.getUTCMonth() + 1;
-
-    const holidays = [
-        "1-1", "6-1", "25-4", "1-5", "2-6", 
-        "15-8", "1-11", "8-12", "25-12", "26-12"
-    ];
-    
-    // Easter Monday calculation (simplified)
     const year = utcDate.getUTCFullYear();
+
+    const principalHolidays = ["1-1", "1-5", "15-8", "25-12"];
+    const holidays = ["6-1", "25-4", "2-6", "1-11", "8-12", "26-12"];
+    
+    // Easter calculation (simplified)
     const a = year % 19;
     const b = Math.floor(year / 100);
     const c = year % 100;
@@ -30,14 +29,26 @@ const isHoliday = (date: Date): boolean => {
     const m = Math.floor((a + 11 * h + 22 * l) / 451);
     const easterMonth = Math.floor((h + l - 7 * m + 114) / 31);
     const easterDay = ((h + l - 7 * m + 114) % 31) + 1;
+    
+    const easterSunday = new Date(Date.UTC(year, easterMonth - 1, easterDay));
+     if (month === easterSunday.getUTCMonth() + 1 && day === easterSunday.getUTCDate()) {
+        return 'principal_holiday';
+    }
     const easterMonday = new Date(Date.UTC(year, easterMonth - 1, easterDay + 1));
-
     if (month === easterMonday.getUTCMonth() + 1 && day === easterMonday.getUTCDate()) {
-        return true;
+        return 'holiday';
     }
 
-    return holidays.includes(`${day}-${month}`);
+    if (principalHolidays.includes(`${day}-${month}`)) {
+        return 'principal_holiday';
+    }
+    if (holidays.includes(`${day}-${month}`)) {
+        return 'holiday';
+    }
+
+    return 'none';
 };
+
 
 // A more precise, non-iterative function to calculate night hours
 const getNightHours = (start: Date, end: Date): number => {
@@ -73,11 +84,11 @@ const getNightHours = (start: Date, end: Date): number => {
 };
 
 
-export const useAllowanceCalculator = (financialData: FinancialData) => {
+export const useAllowanceCalculator = (financialData: FinancialData, holidayOverrides: HolidayOverrides) => {
     
     const calculateAllowances = useCallback((shift: Omit<CalculatedShift, 'allowances' | 'totalAllowance'>): { allowances: Allowance[], totalAllowance: number } => {
         const allowances: Allowance[] = [];
-        const { date, startTime, endTime, isOvertime, overtimeHours, hasMNS } = shift;
+        const { date, startTime, endTime, isOvertime, overtimeHours, hasMNS, hasMNW } = shift;
         const { primaLinea, contingenza, edr } = financialData;
         
         // --- PRECISE FORMULA IMPLEMENTATION ---
@@ -106,10 +117,17 @@ export const useAllowanceCalculator = (financialData: FinancialData) => {
             endDate.setUTCDate(endDate.getUTCDate() + 1);
         }
         
+        const dayType = holidayOverrides[date] || getHolidayType(shiftDate);
+        const isHolidayShift = dayType === 'holiday';
+        const isPrincipalHolidayShift = dayType === 'principal_holiday';
+
         // --- RULE IMPLEMENTATIONS ---
 
         if (hasMNS) {
             allowances.push({ code: 'MNL', description: ALLOWANCE_RULES['MNL'].description, value: ALLOWANCE_RULES['MNL'].value });
+        }
+        if (hasMNW) {
+            allowances.push({ code: 'MNW', description: ALLOWANCE_RULES['MNW'].description, value: ALLOWANCE_RULES['MNW'].value });
         }
         
         if (endDate.getUTCDay() !== startDate.getUTCDay() && (endH > 0 || (endH === 0 && endM >= 30))) {
@@ -130,14 +148,13 @@ export const useAllowanceCalculator = (financialData: FinancialData) => {
 
         if(isOvertime && overtimeHours) {
             const isSunday = dayOfWeek === 0;
-            const isHolidayShift = isHoliday(shiftDate);
 
-            if (isSunday || isHolidayShift) {
+            if (isPrincipalHolidayShift || isHolidayShift || isSunday) {
                 if (dayHours > 0) {
-                     allowances.push({ code: 'ST-DOM', description: isHolidayShift ? 'Straordinario Festivo Diurno' : 'Straordinario Domenicale Diurno', value: dayHours * (baseOrariaStse * 1.50), hours: dayHours });
+                     allowances.push({ code: 'ST-DOM', description: 'Straordinario Festivo/Domenicale Diurno', value: dayHours * (baseOrariaStse * 1.50), hours: dayHours });
                 }
                 if (nightHours > 0) {
-                     allowances.push({ code: 'ST-DOM-N', description: isHolidayShift ? 'Straordinario Festivo Notturno' : 'Straordinario Domenicale Notturno', value: nightHours * (baseOrariaStse * 1.75), hours: nightHours });
+                     allowances.push({ code: 'ST-DOM-N', description: 'Straordinario Festivo/Domenicale Notturno', value: nightHours * (baseOrariaStse * 1.75), hours: nightHours });
                 }
             } else { // Weekday overtime
                 if (dayHours > 0) {
@@ -153,9 +170,11 @@ export const useAllowanceCalculator = (financialData: FinancialData) => {
             }
         } else { // Regular shift
             const isSunday = dayOfWeek === 0;
-            const isHolidayShift = isHoliday(shiftDate);
             
-            if (isHolidayShift) {
+            if (isPrincipalHolidayShift) {
+                if (dayHours > 0) allowances.push({ code: 'LPH5', description: ALLOWANCE_RULES['LPH5'].description, value: dayHours * (stipendioOrario * ALLOWANCE_RULES['LPH5'].value), hours: dayHours });
+                if (nightHours > 0) allowances.push({ code: 'LPH8', description: ALLOWANCE_RULES['LPH8'].description, value: nightHours * (stipendioOrario * ALLOWANCE_RULES['LPH8'].value), hours: nightHours });
+            } else if (isHolidayShift) {
                 if (dayHours > 0) allowances.push({ code: 'LFH6', description: ALLOWANCE_RULES['LFH6'].description, value: dayHours * (stipendioOrario * ALLOWANCE_RULES['LFH6'].value), hours: dayHours });
                 if (nightHours > 0) allowances.push({ code: 'LFH8', description: ALLOWANCE_RULES['LFH8'].description, value: nightHours * (stipendioOrario * ALLOWANCE_RULES['LFH8'].value), hours: nightHours });
             } else if (isSunday) {
@@ -172,7 +191,7 @@ export const useAllowanceCalculator = (financialData: FinancialData) => {
 
         return { allowances, totalAllowance };
 
-    }, [financialData]);
+    }, [financialData, holidayOverrides]);
 
     return { calculateAllowances };
 };

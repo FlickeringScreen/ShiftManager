@@ -27,6 +27,9 @@ declare global {
 }
 
 export type Page = 'generator' | 'calculator' | 'reference' | 'settings';
+export type HolidayType = 'holiday' | 'principal_holiday';
+export type HolidayOverrides = Record<string, HolidayType>;
+
 
 const App: React.FC = () => {
     const [currentPage, setCurrentPage] = useState<Page>('generator');
@@ -36,8 +39,9 @@ const App: React.FC = () => {
         edr: 37.73,
     });
     const [calculatedShifts, setCalculatedShifts] = useLocalStorage<CalculatedShift[]>('calculatedShifts', []);
+    const [holidayOverrides, setHolidayOverrides] = useLocalStorage<HolidayOverrides>('holidayOverrides', {});
     const [logs, setLogs] = useState<string[]>(['Console initialised.']);
-    const { calculateAllowances } = useAllowanceCalculator(financialData);
+    const { calculateAllowances } = useAllowanceCalculator(financialData, holidayOverrides);
     const [launchedPdfFile, setLaunchedPdfFile] = useState<File | null>(null);
 
     useEffect(() => {
@@ -126,6 +130,8 @@ const App: React.FC = () => {
                         setFinancialData={setFinancialData}
                         calculatedShifts={calculatedShifts}
                         setCalculatedShifts={setCalculatedShifts}
+                        holidayOverrides={holidayOverrides}
+                        setHolidayOverrides={setHolidayOverrides}
                     />
                 )}
                 {currentPage === 'reference' && (

@@ -169,4 +169,5 @@ export const ALLOWANCE_RULES: Record<string, AllowanceRule> = {
     'IVTT': { description: '15% Variabilità Oraria', type: 'lump_sum', value: 8.65 },
     'IVTO': { description: 'MOTIVO AZIENDALE', type: 'hourly_percentage', value: 0.50, base: 'stipendio_orario' },
     'MNL': { description: 'Mancato Riposo Settimanale', type: 'lump_sum', value: 62.31 },
+    'MNW': { description: 'Mancato Giorno non Lavorato', type: 'lump_sum', value: 30.00 },
 };
