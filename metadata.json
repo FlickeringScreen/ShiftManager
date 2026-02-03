@@ -1,0 +1,5 @@
+{
+  "name": "Shift Manager",
+  "description": "An application to extract shifts from a PDF schedule, generate an ICS calendar file, and calculate work shift allowances (maggiorazioni) based on user-provided financial data.",
+  "requestFramePermissions": []
+}
