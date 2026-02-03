@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { FinancialData } from '../types';
 import { ALLOWANCE_RULES } from '../constants';
@@ -37,7 +38,6 @@ const ReferenceCard: React.FC<{
 export const ReferenceTable: React.FC<ReferenceTableProps> = ({ financialData }) => {
     const { primaLinea, contingenza, edr } = financialData;
 
-    // --- PRECISE FORMULA IMPLEMENTATION ---
     const baseStipendioRaw = primaLinea + contingenza;
     const ottoPercent = baseStipendioRaw * 0.08;
     const BASE = baseStipendioRaw + ottoPercent;

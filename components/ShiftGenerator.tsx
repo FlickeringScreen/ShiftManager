@@ -57,13 +57,6 @@ export const ShiftGenerator: React.FC<ShiftGeneratorProps> = ({ onShiftsExtracte
         }
     };
 
-    const formatICSDate = (date: Date, time: string): string => {
-        const [hours, minutes] = time.split(':');
-        const eventDate = new Date(date);
-        eventDate.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
-        return eventDate.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    };
-
     const generateICS = () => {
         if (!extractedSchedule) return;
         let icsContent = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//RAI Shift Calendar//EN'];
@@ -79,8 +72,8 @@ export const ShiftGenerator: React.FC<ShiftGeneratorProps> = ({ onShiftsExtracte
             const [startH, startM] = times[0].split(':').map(Number);
             const [endH, endM] = times[1].split(':').map(Number);
             
-            startDate.setUTCHours(startH, startM);
-            endDate.setUTCHours(endH, endM);
+            startDate.setUTCHours(startH, startM, 0, 0);
+            endDate.setUTCHours(endH, endM, 0, 0);
 
             if (endDate <= startDate) {
                 endDate.setUTCDate(endDate.getUTCDate() + 1);

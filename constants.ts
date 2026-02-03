@@ -1,3 +1,4 @@
+
 import type { AllowanceRule } from './types';
 
 // From original JS file
@@ -100,7 +101,8 @@ export const SHIFT_TIMES: Record<string, [string, string]> = {
     'Z090': ['00:00', '00:00'], 'Z091': ['00:00', '00:00'], 'Z092': ['00:00', '00:00'],
     'Z093': ['00:00', '00:00'], 'Z094': ['00:00', '00:00'], 'Z095': ['00:00', '00:00'],
     'Z096': ['00:00', '00:00'], 'Z097': ['00:00', '00:00'], 'Z099': ['00:00', '00:00'],
-    'RCF': ['00:00', '00:00']
+    'RCF': ['00:00', '00:00'],
+    'XXX': ['00:00', '00:00']
 };
 
 export const LOCATIONS: Record<string, string> = {

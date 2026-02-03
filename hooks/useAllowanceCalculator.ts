@@ -1,19 +1,19 @@
+
 import { useCallback } from 'react';
 import type { CalculatedShift, FinancialData, Allowance } from '../types';
 import { ALLOWANCE_RULES } from '../constants';
 import type { HolidayOverrides } from '../App';
 
-const getHolidayType = (date: Date): 'none' | 'holiday' | 'principal_holiday' => {
-    // This is a simplified holiday check. For production, a more robust library might be needed.
-    const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-    const day = utcDate.getUTCDate();
-    const month = utcDate.getUTCMonth() + 1;
-    const year = utcDate.getUTCFullYear();
+const getHolidayTypeForDate = (date: Date): 'none' | 'holiday' | 'principal_holiday' => {
+    // Use UTC to avoid timezone-related date shifts
+    const day = date.getUTCDate();
+    const month = date.getUTCMonth() + 1;
+    const year = date.getUTCFullYear();
 
     const principalHolidays = ["1-1", "1-5", "15-8", "25-12"];
     const holidays = ["6-1", "25-4", "2-6", "1-11", "8-12", "26-12"];
     
-    // Easter calculation (simplified)
+    // Easter calculation (Meeus/Jones/Butcher algorithm)
     const a = year % 19;
     const b = Math.floor(year / 100);
     const c = year % 100;
@@ -29,57 +29,29 @@ const getHolidayType = (date: Date): 'none' | 'holiday' | 'principal_holiday' =>
     const easterMonth = Math.floor((h + l - 7 * m + 114) / 31);
     const easterDay = ((h + l - 7 * m + 114) % 31) + 1;
     
-    const easterSunday = new Date(Date.UTC(year, easterMonth - 1, easterDay));
-     if (month === easterSunday.getUTCMonth() + 1 && day === easterSunday.getUTCDate()) {
-        return 'principal_holiday';
-    }
+    if (month === easterMonth && day === easterDay) return 'principal_holiday';
+    
     const easterMonday = new Date(Date.UTC(year, easterMonth - 1, easterDay + 1));
-    if (month === easterMonday.getUTCMonth() + 1 && day === easterMonday.getUTCDate()) {
-        return 'holiday';
-    }
+    if (month === easterMonday.getUTCMonth() + 1 && day === easterMonday.getUTCDate()) return 'holiday';
 
-    if (principalHolidays.includes(`${day}-${month}`)) {
-        return 'principal_holiday';
-    }
-    if (holidays.includes(`${day}-${month}`)) {
-        return 'holiday';
-    }
+    if (principalHolidays.includes(`${day}-${month}`)) return 'principal_holiday';
+    if (holidays.includes(`${day}-${month}`)) return 'holiday';
 
     return 'none';
 };
 
+const calculateNightHours = (start: Date, end: Date): number => {
+    let nightMinutes = 0;
+    let current = new Date(start);
 
-// A more precise, non-iterative function to calculate night hours
-const getNightHours = (start: Date, end: Date): number => {
-    const nightStart1 = 0; // 00:00
-    const nightEnd1 = 6 * 60; // 06:00
-    const nightStart2 = 21 * 60; // 21:00
-    const nightEnd2 = 24 * 60; // 24:00
-
-    const startMinutes = start.getUTCHours() * 60 + start.getUTCMinutes();
-    const endMinutesTotal = (end.getTime() - start.getTime()) / (1000 * 60) + startMinutes;
-    
-    let totalNightMinutes = 0;
-
-    for (let day = 0; day * 1440 < endMinutesTotal; day++) {
-        const dayOffset = day * 1440;
-
-        // Intersection with 00:00 - 06:00
-        const overlapStart1 = Math.max(startMinutes, dayOffset + nightStart1);
-        const overlapEnd1 = Math.min(endMinutesTotal, dayOffset + nightEnd1);
-        if (overlapEnd1 > overlapStart1) {
-            totalNightMinutes += overlapEnd1 - overlapStart1;
+    while (current < end) {
+        const hour = current.getUTCHours();
+        if (hour >= 21 || hour < 6) {
+            nightMinutes++;
         }
-
-        // Intersection with 21:00 - 24:00
-        const overlapStart2 = Math.max(startMinutes, dayOffset + nightStart2);
-        const overlapEnd2 = Math.min(endMinutesTotal, dayOffset + nightEnd2);
-        if (overlapEnd2 > overlapStart2) {
-            totalNightMinutes += overlapEnd2 - overlapStart1;
-        }
+        current.setUTCMinutes(current.getUTCMinutes() + 1);
     }
-
-    return totalNightMinutes / 60;
+    return nightMinutes / 60;
 };
 
 
@@ -90,7 +62,6 @@ export const useAllowanceCalculator = (financialData: FinancialData, holidayOver
         const { date, startTime, endTime, isOvertime, overtimeHours, hasMNS } = shift;
         const { primaLinea, contingenza, edr } = financialData;
         
-        // --- PRECISE FORMULA IMPLEMENTATION ---
         const baseStipendioRaw = primaLinea + contingenza;
         const BASE = baseStipendioRaw * 1.08;
         const stipendioOrario = BASE / 173;
@@ -100,9 +71,8 @@ export const useAllowanceCalculator = (financialData: FinancialData, holidayOver
         const baseMensileStse = BASE + tredicesimaMensile;
         const baseOrariaStse = baseMensileStse / 173;
         
-        // Use UTC for all date logic to avoid timezone issues
         const shiftDate = new Date(date);
-        const dayOfWeek = shiftDate.getUTCDay(); // 0 = Sunday
+        const dayOfWeek = shiftDate.getUTCDay();
 
         const [startH, startM] = startTime.split(':').map(Number);
         const [endH, endM] = endTime.split(':').map(Number);
@@ -117,11 +87,10 @@ export const useAllowanceCalculator = (financialData: FinancialData, holidayOver
             endDate.setUTCDate(endDate.getUTCDate() + 1);
         }
         
-        const dayType = holidayOverrides[date] || getHolidayType(shiftDate);
+        const dayType = holidayOverrides[date] || getHolidayTypeForDate(shiftDate);
         const isHolidayShift = dayType === 'holiday';
         const isPrincipalHolidayShift = dayType === 'principal_holiday';
-
-        // --- RULE IMPLEMENTATIONS ---
+        const isSunday = dayOfWeek === 0;
 
         if (hasMNS) {
             allowances.push({ code: 'MNL', description: ALLOWANCE_RULES['MNL'].description, value: stipendioGiornaliero });
@@ -131,21 +100,19 @@ export const useAllowanceCalculator = (financialData: FinancialData, holidayOver
              allowances.push({ code: 'TN30', description: ALLOWANCE_RULES['TN30'].description, value: (baseStipendioRaw * ALLOWANCE_RULES['TN30'].value) / 26 });
         }
 
-        if ((endH === 23 && endM >= 30) || endDate.getUTCDay() !== startDate.getUTCDay()) {
+        if ((endH === 23 && endM >= 30) || (endDate.getUTCDay() !== startDate.getUTCDay() && endH >= 0)) {
              allowances.push({ code: 'RMTR', description: ALLOWANCE_RULES['RMTR'].description, value: ALLOWANCE_RULES['RMTR'].value });
         }
 
-        if (startH < 6 && startH >= 5 && !isOvertime) {
+        if (startH === 5 && !isOvertime) {
             allowances.push({ code: 'TN35', description: ALLOWANCE_RULES['TN35'].description, value: (baseStipendioRaw * ALLOWANCE_RULES['TN35'].value) / 26 });
         }
         
-        const nightHours = getNightHours(startDate, endDate);
+        const nightHours = calculateNightHours(startDate, endDate);
         const shiftDuration = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
         const dayHours = shiftDuration - nightHours;
 
         if(isOvertime && overtimeHours) {
-            const isSunday = dayOfWeek === 0;
-
             if (isPrincipalHolidayShift || isHolidayShift || isSunday) {
                 if (dayHours > 0) {
                      allowances.push({ code: 'ST-DOM', description: 'Straordinario Festivo/Domenicale Diurno', value: dayHours * (baseOrariaStse * 1.50), hours: dayHours });
@@ -158,16 +125,11 @@ export const useAllowanceCalculator = (financialData: FinancialData, holidayOver
                      allowances.push({ code: 'STSE', description: 'Straordinario Feriale Diurno', value: dayHours * (baseOrariaStse * (1 + ALLOWANCE_RULES['STSE'].value)), hours: dayHours });
                 }
                 if (nightHours > 0) {
-                    // Split nocturnal overtime into its two components as per payslip
-                    // The first part is the full overtime hourly pay (base + 30%)
                     allowances.push({ code: 'STSE', description: 'Straordinario Feriale (Quota Oraria)', value: nightHours * (baseOrariaStse * (1 + ALLOWANCE_RULES['STSE'].value)), hours: nightHours });
-                    // The second part is the additional night surcharge (50% on regular hourly pay)
                     allowances.push({ code: 'LNH5', description: 'Maggiorazione Notturna (su Straordinario)', value: nightHours * (stipendioOrario * ALLOWANCE_RULES['LNH5'].value), hours: nightHours });
                 }
             }
         } else { // Regular shift
-            const isSunday = dayOfWeek === 0;
-            
             if (isPrincipalHolidayShift) {
                 if (dayHours > 0) allowances.push({ code: 'LPH5', description: ALLOWANCE_RULES['LPH5'].description, value: dayHours * (stipendioOrario * ALLOWANCE_RULES['LPH5'].value), hours: dayHours });
                 if (nightHours > 0) allowances.push({ code: 'LPH8', description: ALLOWANCE_RULES['LPH8'].description, value: nightHours * (stipendioOrario * ALLOWANCE_RULES['LPH8'].value), hours: nightHours });

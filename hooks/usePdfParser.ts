@@ -24,6 +24,7 @@ async function extractTextFromPDF(file: File, addLog: AddLogFn): Promise<string>
             const textContent = await page.getTextContent();
             addLog(`Page ${i} has ${textContent.items.length} text items`);
             
+            // Sort items by Y coordinate first, then X, to reconstruct lines
             const items = textContent.items.sort((a: any, b: any) => {
                 const yDiff = Math.abs(a.transform[5] - b.transform[5]);
                 if (yDiff > 5) return b.transform[5] - a.transform[5];
@@ -66,11 +67,9 @@ function findEmployeeLine(text: string, firstName: string, lastName: string, add
 
 function generateWeekDates(day: number, month: number, year: number): Date[] {
     const dates: Date[] = [];
-    // Use Date.UTC to create a timezone-agnostic start date
     const startDate = new Date(Date.UTC(year, month - 1, day));
     for (let i = 0; i < 7; i++) {
         const date = new Date(startDate);
-        // Use setUTCDate to avoid timezone-related shifts when incrementing the day
         date.setUTCDate(startDate.getUTCDate() + i);
         dates.push(date);
     }
@@ -79,23 +78,9 @@ function generateWeekDates(day: number, month: number, year: number): Date[] {
 
 function extractWeekDates(text: string, addLog: AddLogFn): Date[] {
     const lines = text.split('\n');
-    const periodoIndex = text.indexOf('PERIODO DI RIFERIMENTO');
-    if (periodoIndex !== -1) {
-        const chunk = text.substring(periodoIndex, periodoIndex + 300);
-        let match = chunk.match(/(\d{2})\/(\d{2})\/(\d{4})\s*-\s*(\d{2})\/(\d{2})\/(\d{4})/) 
-            || chunk.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2})\/(\d{2})\/(\d{4})/);
-        
-        if (match) {
-            const startDay = parseInt(match[1]);
-            const startMonth = parseInt(match[2]);
-            const year = parseInt(match[3]);
-            addLog(`✓ Found week dates: ${match[0]}`);
-            return generateWeekDates(startDay, startMonth, year);
-        }
-    }
-
     for (const line of lines) {
-        const match = line.match(/(\d{2})\/(\d{2})\/(\d{4})\s*-?\s*(\d{2})\/(\d{2})\/(\d{4})/);
+        // Match formats like "01/01/2024 - 07/01/2024" or "PERIODO DI RIFERIMENTO 01/01/2024 AL 07/01/2024"
+        const match = line.match(/(\d{2})\/(\d{2})\/(\d{4})\s*[-A-Z\s]*\s*(\d{2})\/(\d{2})\/(\d{4})/);
         if (match) {
             const startDay = parseInt(match[1]);
             const startMonth = parseInt(match[2]);
@@ -107,10 +92,10 @@ function extractWeekDates(text: string, addLog: AddLogFn): Date[] {
 
     addLog('❌ WARNING: Could not find week dates in PDF! Using current date as fallback.');
     const today = new Date();
-    const dayOfWeek = today.getDay();
-    const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-    const monday = new Date(today.setDate(diff));
-    return generateWeekDates(monday.getDate(), monday.getMonth() + 1, monday.getFullYear());
+    const dayOfWeek = today.getUTCDay(); // Sunday = 0, Monday = 1
+    const diff = today.getUTCDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to Monday
+    const monday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), diff));
+    return generateWeekDates(monday.getUTCDate(), monday.getUTCMonth() + 1, monday.getUTCFullYear());
 }
 
 function parseSchedule(text: string, firstName: string, lastName: string, addLog: AddLogFn): { found: boolean, schedule: ExtractedShift[] } {
@@ -121,100 +106,62 @@ function parseSchedule(text: string, firstName: string, lastName: string, addLog
     const schedule: ExtractedShift[] = [];
 
     const nameLine = employeeData.line;
-    addLog(`Name line: ${nameLine}`);
-    
-    const nameRegex = new RegExp(`${lastName}.*${firstName}`, 'i');
+    const nameRegex = new RegExp(`${lastName}[^A-Z]*${firstName}`, 'i');
     let dataPart = nameLine.replace(nameRegex, '').trim();
-    dataPart = dataPart.replace(/>/g, ' '); // CRITICAL: remove '>' characters
-    addLog(`Data part (after removing >): ${dataPart}`);
+    // Pre-processing: Standardize separators and remove noise
+    dataPart = dataPart.replace(/>/g, ' ').replace(/'/g, ' ');
+    addLog(`Data part to be parsed: "${dataPart}"`);
 
-    const shiftsFound: { code: string; position: number; endPosition: number }[] = [];
-    let match;
+    const tokens = dataPart.split(/\s+/).filter(Boolean);
+    let dayIndex = 0;
+    
+    for (let i = 0; i < tokens.length && dayIndex < 7; i++) {
+        const currentToken = tokens[i];
+        
+        if (SHIFT_TIMES[currentToken] || RIPOSO_NAMES[currentToken] || currentToken === 'XXX') {
+            const shiftCode = currentToken;
+            let location = 'N/A';
+            let hasMFS = false, hasMNS = false, hasFS = false;
+            
+            const locationTokens: string[] = [];
+            // Look ahead for location and flags before the next shift code
+            for (let j = i + 1; j < tokens.length; j++) {
+                const nextToken = tokens[j];
+                if (SHIFT_TIMES[nextToken] || RIPOSO_NAMES[nextToken] || nextToken === 'XXX') {
+                    i = j - 1; // Move main loop cursor to the position before the next shift
+                    break;
+                }
+                
+                if (nextToken === 'MFS') hasMFS = true;
+                else if (nextToken === 'MNS') hasMNS = true;
+                else if (nextToken === 'FS') hasFS = true;
+                else if (!/^\d+$/.test(nextToken) && isNaN(Number(nextToken))) {
+                    locationTokens.push(nextToken);
+                }
 
-    // 1. Find quoted shifts
-    const quotedPattern = /'([A-Z*+0-9\s-]{1,5})'/g;
-    while ((match = quotedPattern.exec(dataPart)) !== null) {
-        const shiftCode = match[1].trim();
-        if (SHIFT_TIMES[shiftCode]) {
-            shiftsFound.push({
-                code: shiftCode,
-                position: match.index,
-                endPosition: match.index + match[0].length
+                if(j === tokens.length - 1) { // End of tokens
+                    i = j;
+                }
+            }
+
+            if(locationTokens.length > 0) {
+                location = locationTokens.join(' ');
+            }
+            if(shiftCode.startsWith('Z') || shiftCode === 'RCF') {
+                location = 'Riposo'; // Override location for rest days
+            }
+
+            addLog(`  Day ${dayIndex + 1}: ${shiftCode} @ ${location}${hasMFS ? ' [MFS]' : ''}${hasMNS ? ' [MNS]' : ''}${hasFS ? ' [FS]' : ''}`);
+
+            schedule.push({
+                date: weekDates[dayIndex],
+                shiftCode,
+                location,
+                hasMFS, hasMNS, hasFS
             });
-            addLog(`  Found quoted shift code: '${shiftCode}'`);
+            dayIndex++;
         }
     }
-
-    // 2. Find unquoted shifts and rest days
-    const allTokens = dataPart.split(/\s+/).filter(Boolean);
-    let currentPos = 0;
-    for (const token of allTokens) {
-        const tokenPos = dataPart.indexOf(token, currentPos);
-        if (tokenPos === -1) continue;
-        currentPos = tokenPos + token.length;
-
-        const isOverlapping = shiftsFound.some(s => tokenPos >= s.position && tokenPos < s.endPosition);
-        if (!isOverlapping) {
-            if (SHIFT_TIMES[token] || RIPOSO_NAMES[token] || token === 'XXX') {
-                shiftsFound.push({
-                    code: token,
-                    position: tokenPos,
-                    endPosition: tokenPos + token.length
-                });
-                 addLog(`  Found unquoted code: ${token} at position ${tokenPos}`);
-            }
-        }
-    }
-
-    shiftsFound.sort((a, b) => a.position - b.position);
-    addLog(`✓ Found ${shiftsFound.length} shift codes/placeholders`);
-
-    if(shiftsFound.length === 0) return { found: true, schedule: [] };
-
-    // 3. Parse location and flags between shifts
-    shiftsFound.forEach((shift, dayIndex) => {
-        if (dayIndex >= 7) return;
-
-        let afterShiftText;
-        if (dayIndex < shiftsFound.length - 1) {
-            afterShiftText = dataPart.substring(shift.endPosition, shiftsFound[dayIndex + 1].position);
-        } else {
-            afterShiftText = dataPart.substring(shift.endPosition);
-        }
-        addLog(`  After shift '${shift.code}': "${afterShiftText.trim()}"`);
-
-        const tokens = afterShiftText.trim().split(/\s+/).filter(Boolean);
-        let location = 'N/A';
-        let hasMFS = false, hasMNS = false, hasFS = false;
-        
-        const locationTokens = [];
-
-        for(const token of tokens) {
-            if(token === 'MFS') hasMFS = true;
-            else if(token === 'MNS') hasMNS = true;
-            else if(token === 'FS') hasFS = true;
-            else if(!/^\d+$/.test(token)) { // Avoid accidentally picking up numbers as locations
-                locationTokens.push(token);
-            }
-        }
-        
-        if(locationTokens.length > 0) {
-            location = locationTokens.join(' ');
-        }
-        
-        if(shift.code.startsWith('Z') || shift.code === 'RCF') {
-            location = 'Riposo'; // Override location for rest days
-        }
-
-        addLog(`  Day ${dayIndex + 1}: ${shift.code} @ ${location}${hasMFS ? ' [MFS]' : ''}${hasMNS ? ' [MNS]' : ''}${hasFS ? ' [FS]' : ''}`);
-
-        schedule.push({
-            date: weekDates[dayIndex],
-            shiftCode: shift.code,
-            location: location,
-            hasMFS, hasMNS, hasFS
-        });
-    });
 
     addLog(`✓ Total shifts extracted: ${schedule.length}`);
     return { found: true, schedule };

@@ -164,7 +164,7 @@ const AddOvertimeModal: React.FC<{
 
     useEffect(() => {
         if (isOpen) {
-            setDate(initialDate || '');
+            setDate(initialDate || new Date().toISOString().split('T')[0]);
             setStartTime(defaultStartTime || '00:00');
             setEndTime('00:00'); // Always reset end time
         }
@@ -216,8 +216,6 @@ interface ShiftRowProps {
 }
 
 const ShiftRow: React.FC<ShiftRowProps> = ({ shift, onUpdate, onDelete, onToggleExpand }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    
     const displayDate = new Date(shift.date).toLocaleDateString('it-IT', { 
         timeZone: 'UTC', 
         weekday: 'short', 
@@ -234,8 +232,8 @@ const ShiftRow: React.FC<ShiftRowProps> = ({ shift, onUpdate, onDelete, onToggle
                     <span className="ml-2 text-xs font-bold text-red-400 bg-red-900/50 px-2 py-0.5 rounded-full" title="Mancato Riposo Settimanale">MNS</span>
                 )}
             </td>
-            <td className="py-3 px-2 text-sm text-gray-300">{shift.isOvertime ? shift.startTime : shift.startTime}</td>
-            <td className="py-3 px-2 text-sm text-gray-300">{shift.isOvertime ? shift.endTime : shift.endTime}</td>
+            <td className="py-3 px-2 text-sm text-gray-300">{shift.startTime}</td>
+            <td className="py-3 px-2 text-sm text-gray-300">{shift.endTime}</td>
             <td className="py-3 px-2 text-sm font-semibold text-green-400 text-right">€{shift.totalAllowance.toFixed(2)}</td>
             <td className="py-3 px-2 whitespace-nowrap text-right text-sm">
                  {!shift.isOvertime && <button onClick={(e) => { e.stopPropagation(); onUpdate(shift); }} className="text-blue-400 hover:text-blue-300 font-semibold mr-3">Modifica</button>}
@@ -274,16 +272,17 @@ export const AllowanceCalculator: React.FC<AllowanceCalculatorProps> = ({ financ
     const [holidayPopup, setHolidayPopup] = useState<{ date: string; anchorEl: HTMLElement } | null>(null);
 
     useEffect(() => {
+        // Recalculate all shifts if financial data or holiday overrides change
         if (calculatedShifts.length > 0) {
             setCalculatedShifts(prevShifts => 
                 prevShifts.map(shift => {
-                    const { allowances: _, totalAllowance: __, ...shiftBase } = shift;
-                    const { allowances, totalAllowance } = calculateAllowances(shiftBase);
+                    const { allowances, totalAllowance } = calculateAllowances(shift);
                     return { ...shift, allowances, totalAllowance };
                 })
             );
         }
-    }, [financialData, holidayOverrides, setCalculatedShifts]); // Removed calculateAllowances to prevent potential loops, direct dependencies are safer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [financialData, holidayOverrides]);
 
     const updateAndRecalculateShift = (updatedShift: CalculatedShift) => {
         const { allowances, totalAllowance } = calculateAllowances(updatedShift);
