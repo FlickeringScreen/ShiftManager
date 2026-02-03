@@ -1,0 +1,31 @@
+{
+  "name": "Shift Manager",
+  "short_name": "Shift Manager",
+  "description": "An application to extract shifts from a PDF schedule, generate an ICS calendar file, and calculate work shift allowances.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": ".",
+      "accept": {
+        "application/pdf": [
+          ".pdf"
+        ]
+      }
+    }
+  ]
+}
