@@ -1,4 +1,3 @@
-
 import { useCallback } from 'react';
 import type { CalculatedShift, FinancialData, Allowance } from '../types';
 import { ALLOWANCE_RULES } from '../constants';
@@ -76,7 +75,7 @@ const getNightHours = (start: Date, end: Date): number => {
         const overlapStart2 = Math.max(startMinutes, dayOffset + nightStart2);
         const overlapEnd2 = Math.min(endMinutesTotal, dayOffset + nightEnd2);
         if (overlapEnd2 > overlapStart2) {
-            totalNightMinutes += overlapEnd2 - overlapStart2;
+            totalNightMinutes += overlapEnd2 - overlapStart1;
         }
     }
 
@@ -88,13 +87,14 @@ export const useAllowanceCalculator = (financialData: FinancialData, holidayOver
     
     const calculateAllowances = useCallback((shift: Omit<CalculatedShift, 'allowances' | 'totalAllowance'>): { allowances: Allowance[], totalAllowance: number } => {
         const allowances: Allowance[] = [];
-        const { date, startTime, endTime, isOvertime, overtimeHours, hasMNS, hasMNW } = shift;
+        const { date, startTime, endTime, isOvertime, overtimeHours, hasMNS } = shift;
         const { primaLinea, contingenza, edr } = financialData;
         
         // --- PRECISE FORMULA IMPLEMENTATION ---
         const baseStipendioRaw = primaLinea + contingenza;
         const BASE = baseStipendioRaw * 1.08;
         const stipendioOrario = BASE / 173;
+        const stipendioGiornaliero = BASE / 26;
 
         const tredicesimaMensile = (BASE + edr) / 12;
         const baseMensileStse = BASE + tredicesimaMensile;
@@ -124,10 +124,7 @@ export const useAllowanceCalculator = (financialData: FinancialData, holidayOver
         // --- RULE IMPLEMENTATIONS ---
 
         if (hasMNS) {
-            allowances.push({ code: 'MNL', description: ALLOWANCE_RULES['MNL'].description, value: ALLOWANCE_RULES['MNL'].value });
-        }
-        if (hasMNW) {
-            allowances.push({ code: 'MNW', description: ALLOWANCE_RULES['MNW'].description, value: ALLOWANCE_RULES['MNW'].value });
+            allowances.push({ code: 'MNL', description: ALLOWANCE_RULES['MNL'].description, value: stipendioGiornaliero });
         }
         
         if (endDate.getUTCDay() !== startDate.getUTCDay() && (endH > 0 || (endH === 0 && endM >= 30))) {

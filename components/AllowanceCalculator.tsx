@@ -17,7 +17,6 @@ const EditShiftModal: React.FC<{
         startTime: '', 
         endTime: '',
         hasMNS: false,
-        hasMNW: false,
     });
 
     useEffect(() => {
@@ -27,7 +26,6 @@ const EditShiftModal: React.FC<{
                 startTime: shift.startTime,
                 endTime: shift.endTime,
                 hasMNS: shift.hasMNS,
-                hasMNW: shift.hasMNW || false,
             });
         }
     }, [shift]);
@@ -69,10 +67,6 @@ const EditShiftModal: React.FC<{
                         <input type="checkbox" id="hasMNS" checked={editData.hasMNS} onChange={e => setEditData(d => ({ ...d, hasMNS: e.target.checked }))} className="h-4 w-4 rounded border-gray-500 bg-gray-700 text-blue-600 focus:ring-blue-500" />
                         <label htmlFor="hasMNS" className="ml-2 block text-sm text-gray-300">Mancato Riposo Settimanale</label>
                     </div>
-                    <div className="flex items-center">
-                        <input type="checkbox" id="hasMNW" checked={editData.hasMNW} onChange={e => setEditData(d => ({ ...d, hasMNW: e.target.checked }))} className="h-4 w-4 rounded border-gray-500 bg-gray-700 text-blue-600 focus:ring-blue-500" />
-                        <label htmlFor="hasMNW" className="ml-2 block text-sm text-gray-300">Mancato Giorno non Lavorato</label>
-                    </div>
                 </div>
                 <div className="mt-8 flex justify-end space-x-4">
                     <button onClick={onClose} className="bg-gray-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-gray-500 transition-colors">Annulla</button>
@@ -87,13 +81,12 @@ const AddShiftModal: React.FC<{
     isOpen: boolean;
     date: string;
     onClose: () => void;
-    onSave: (data: { date: string; shiftCode: string; startTime: string; endTime: string; hasMNS: boolean; hasMNW: boolean; }) => void;
+    onSave: (data: { date: string; shiftCode: string; startTime: string; endTime: string; hasMNS: boolean; }) => void;
 }> = ({ isOpen, date, onClose, onSave }) => {
     const [shiftCode, setShiftCode] = useState<string>(Object.keys(SHIFT_TIMES)[0]);
     const [startTime, setStartTime] = useState<string>(SHIFT_TIMES[Object.keys(SHIFT_TIMES)[0]][0]);
     const [endTime, setEndTime] = useState<string>(SHIFT_TIMES[Object.keys(SHIFT_TIMES)[0]][1]);
     const [hasMNS, setHasMNS] = useState(false);
-    const [hasMNW, setHasMNW] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -103,7 +96,6 @@ const AddShiftModal: React.FC<{
             setStartTime(SHIFT_TIMES[defaultCode][0]);
             setEndTime(SHIFT_TIMES[defaultCode][1]);
             setHasMNS(false);
-            setHasMNW(false);
         }
     }, [isOpen]);
 
@@ -116,7 +108,7 @@ const AddShiftModal: React.FC<{
     };
 
     const handleSave = () => {
-        onSave({ date, shiftCode, startTime, endTime, hasMNS, hasMNW });
+        onSave({ date, shiftCode, startTime, endTime, hasMNS });
     };
 
     if (!isOpen) return null;
@@ -147,10 +139,6 @@ const AddShiftModal: React.FC<{
                     <div className="flex items-center">
                         <input type="checkbox" id="addHasMNS" checked={hasMNS} onChange={e => setHasMNS(e.target.checked)} className="h-4 w-4 rounded border-gray-500 bg-gray-700 text-blue-600 focus:ring-blue-500" />
                         <label htmlFor="addHasMNS" className="ml-2 block text-sm text-gray-300">Mancato Riposo Settimanale</label>
-                    </div>
-                    <div className="flex items-center">
-                        <input type="checkbox" id="addHasMNW" checked={hasMNW} onChange={e => setHasMNW(e.target.checked)} className="h-4 w-4 rounded border-gray-500 bg-gray-700 text-blue-600 focus:ring-blue-500" />
-                        <label htmlFor="addHasMNW" className="ml-2 block text-sm text-gray-300">Mancato Giorno non Lavorato</label>
                     </div>
                 </div>
                 <div className="mt-8 flex justify-end space-x-4">
@@ -245,9 +233,6 @@ const ShiftRow: React.FC<ShiftRowProps> = ({ shift, onUpdate, onDelete, onToggle
                 {shift.hasMNS && (
                     <span className="ml-2 text-xs font-bold text-red-400 bg-red-900/50 px-2 py-0.5 rounded-full" title="Mancato Riposo Settimanale">MNS</span>
                 )}
-                 {shift.hasMNW && (
-                    <span className="ml-2 text-xs font-bold text-orange-400 bg-orange-900/50 px-2 py-0.5 rounded-full" title="Mancato Giorno non Lavorato">MNW</span>
-                )}
             </td>
             <td className="py-3 px-2 text-sm text-gray-300">{shift.isOvertime ? shift.startTime : shift.startTime}</td>
             <td className="py-3 px-2 text-sm text-gray-300">{shift.isOvertime ? shift.endTime : shift.endTime}</td>
@@ -332,7 +317,7 @@ export const AllowanceCalculator: React.FC<AllowanceCalculatorProps> = ({ financ
         setOvertimeModal({ isOpen: true, initialDate: date, defaultStartTime: startTime });
     };
     
-    const handleAddShift = (shiftData: { date: string; shiftCode: string; startTime: string; endTime: string; hasMNS: boolean; hasMNW: boolean; }) => {
+    const handleAddShift = (shiftData: { date: string; shiftCode: string; startTime: string; endTime: string; hasMNS: boolean; }) => {
         const newShiftOmit = {
             id: `manual-${Date.now()}`,
             date: shiftData.date,
@@ -341,7 +326,6 @@ export const AllowanceCalculator: React.FC<AllowanceCalculatorProps> = ({ financ
             endTime: shiftData.endTime,
             isOvertime: false,
             hasMNS: shiftData.hasMNS,
-            hasMNW: shiftData.hasMNW,
         };
         const { allowances, totalAllowance } = calculateAllowances(newShiftOmit);
         const newShift: CalculatedShift = { ...newShiftOmit, allowances, totalAllowance };
@@ -355,7 +339,7 @@ export const AllowanceCalculator: React.FC<AllowanceCalculatorProps> = ({ financ
         const endDate = new Date(`${date}T${endTime}:00.000Z`);
         if (endDate <= startDate) endDate.setUTCDate(endDate.getUTCDate() + 1);
         const overtimeHours = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
-        const newShiftOmit = { id: `overtime-${Date.now()}`, date, shiftCode: 'STRAORD.', startTime, endTime, isOvertime: true, overtimeHours, hasMNS: false, hasMNW: false };
+        const newShiftOmit = { id: `overtime-${Date.now()}`, date, shiftCode: 'STRAORD.', startTime, endTime, isOvertime: true, overtimeHours, hasMNS: false };
         const { allowances, totalAllowance } = calculateAllowances(newShiftOmit);
         const newShift: CalculatedShift = { ...newShiftOmit, allowances, totalAllowance };
         setCalculatedShifts(prev => [...prev, newShift].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
@@ -474,7 +458,6 @@ export const AllowanceCalculator: React.FC<AllowanceCalculatorProps> = ({ financ
                                                     <div className="text-green-400 font-semibold">€{shift.totalAllowance.toFixed(2)}</div>
                                                     <div className="absolute top-1 right-1 flex space-x-1">
                                                         {shift.hasMNS && <div title="Mancato Riposo Settimanale" className="h-2 w-2 bg-red-500 rounded-full border border-red-300"></div>}
-                                                        {shift.hasMNW && <div title="Mancato Giorno non Lavorato" className="h-2 w-2 bg-orange-500 rounded-full border border-orange-300"></div>}
                                                     </div>
                                                 </div>))
                                             ) : day && (

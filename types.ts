@@ -33,7 +33,6 @@ export interface CalculatedShift {
     isOvertime: boolean;
     overtimeHours?: number;
     hasMNS: boolean;
-    hasMNW?: boolean;
 }
 
 export type AllowanceCalculationType = 'hourly_percentage' | 'daily_percentage' | 'lump_sum' | 'special_case';

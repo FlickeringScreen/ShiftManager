@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { FinancialData } from '../types';
 import { ALLOWANCE_RULES } from '../constants';
@@ -54,6 +53,10 @@ export const ReferenceTable: React.FC<ReferenceTableProps> = ({ financialData })
     const calculateValue = (ruleKey: string) => {
         const rule = ALLOWANCE_RULES[ruleKey];
         if (!rule) return { maggiorazione: 0, pagaOraria: 0, valoreLordo: 0 };
+
+        if (ruleKey === 'MNL') {
+            return { maggiorazione: 0, pagaOraria: 0, valoreLordo: stipendioGiornaliero };
+        }
 
         let maggiorazione = 0;
         let valoreLordo = 0;
@@ -125,7 +128,7 @@ export const ReferenceTable: React.FC<ReferenceTableProps> = ({ financialData })
         'Notturni': ['LNH5', 'TN30', 'TN35', 'RMTR'],
         'Straordinari': ['STSE'], // Manual rows will be handled separately
         'Festività e Domenicali': Object.keys(ALLOWANCE_RULES).filter(k => k.startsWith('DH') || k.startsWith('LFH') || k.startsWith('LPH')),
-        'Altro': ['ITV7', 'IVTT', 'IVTO', 'MNL', 'MNW'],
+        'Altro': ['ITV7', 'IVTT', 'IVTO', 'MNL'],
     };
 
     return (
